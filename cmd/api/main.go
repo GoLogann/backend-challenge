@@ -2,22 +2,28 @@ package main
 
 import (
 	"backend-challenge/internal/config"
+	"backend-challenge/internal/module/product"
 	"backend-challenge/internal/repository"
-	"log"
-	"net/http"
+	"backend-challenge/internal/server"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.uber.org/fx"
 )
 
 func main() {
 	cfg := config.LoadConfig()
 
-	mongoDB, err := repository.NewMongoDB(cfg.MongoURI, cfg.Database)
-	if err != nil {
-		log.Fatalf("❌ Error connecting to MongoDB: %v", err)
-	}
-	defer mongoDB.Close()
+	app := fx.New(
+		fx.Provide(func() (*repository.MongoDB, error) {
+			return repository.NewMongoDB(cfg.MongoURI, cfg.Database)
+		}),
+		fx.Provide(func(m *repository.MongoDB) *mongo.Database {
+			return m.Database
+		}),
 
-	err = http.ListenAndServe(":8080", nil)
-	if err != nil {
-		return
-	}
+		server.RouterModule(),
+		product.Module,
+		fx.Invoke(server.RegisterRoutes),
+	)
+
+	app.Run()
 }
